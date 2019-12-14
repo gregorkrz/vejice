@@ -46,7 +46,7 @@ class Task:
                     md_out+="❌"
                     errors += 1
                 else:
-                    md_out+=":heavy_check_mark:"
+                    md_out+="✔️"
         if errors==0: md_out+="\n\n  ✅ Pravilno"
         else: md_out+="\n\n ❕ Napačno"
         return md_out
