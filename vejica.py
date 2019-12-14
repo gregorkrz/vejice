@@ -2,6 +2,11 @@ import random
 import logging
 import os
 import io
+import uuid
+
+
+tasks = {}
+
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -18,87 +23,156 @@ def random_line():
 
 class Task:
     def __init__(self):
-        self.sentence, self.solutions, self.correct_sentence = self.generate_sentence()
+        self.solutions, self.sentence = self.generate_sentence()
         self.answers = []
-    def putAnswer(self, answer, index):
-        if answer: to_replace = "*,*"
-        else: to_replace = ""
-        x = self.sentence
-        x = x.replace(' *({})*'.format(index), to_replace, 1)
+    def putAnswer(self, answer):
         self.answers.append(answer)
-
-    def check_answers(self):
-        if len(self.solutions) != len(self.answers): return False
-        for i in range(len(self.solutions)):
-            if self.solutions[i] != self.answers[i]: return False
-        return True
-
+    
+    def generate_final_sentence(self):
+        md_out=''
+        errors = 0
+        for i in range(len(self.sentence)):
+            md_out += self.sentence[i]
+            if i < (len(self.sentence) - 1):
+                if self.answers[i]==True and self.solutions[i]==True:
+                    # correct comma
+                    md_out+=", ✔️"
+                elif self.answers[i] == False and self.solutions[i] == True:
+                    # missing comma
+                    errors += 1
+                    md_out+="**,** Ⓜ️"
+                elif self.answers[i] == True and self.solutions[i] == False:
+                    # comma too much
+                    md_out+="❌"
+                    errors += 1
+                else:
+                    md_out+=":heavy_check_mark:"
+        if errors==0: md_out+="\n\n  ✅ Pravilno"
+        else: md_out+="\n\n ❕ Napačno"
+        return md_out
+        
     def generate_sentence(self):
         x = random_line()
-        correct_sentence = x
+        sentence = []
         solutions = []
-        comma_counter = 1
         last_index = -1
     
         while x.find('¤', last_index+1) > -1 or x.find('÷', last_index+1) > -1:
             commaLoc = x.find('¤', last_index+1)
             noCommaLoc = x.find('÷', last_index+1)
+            print(commaLoc, "jjjj", noCommaLoc)
             if commaLoc != -1 and (noCommaLoc > commaLoc or noCommaLoc == -1):
-                x = x.replace('¤', ' *({})*'.format(comma_counter), 1)
-                correct_sentence = correct_sentence.replace('¤', '*,*'.format(comma_counter), 1)
-                print(x)
+                print("appendComma", last_index, commaLoc)
+                sentence.append(x[last_index+1:commaLoc])
                 last_index = commaLoc
                 solutions.append(True)
             else:
-                x = x.replace('÷', ' *({})*'.format(comma_counter), 1)
-                correct_sentence = correct_sentence.replace('÷', ''.format(comma_counter), 1)
+                sentence.append(x[last_index+1:noCommaLoc])
+                print("appNoComma", last_index, noCommaLoc)
                 last_index = noCommaLoc
                 solutions.append(False)
-            
-            comma_counter += 1
-        return x, solutions, correct_sentence
+        sentence.append(x[last_index+1:])
+        return solutions, sentence
+    
+    def generate_display_sentence(self):
+        md_out=''
+        for i in range(len(self.sentence)):
+            md_out += self.sentence[i]
+            if i < len(self.answers) and self.answers[i]==True:
+                md_out+=","
+            if i == len(self.answers):
+                md_out+="❓"
+        return md_out
 
-
-def start(update, context):
-    keyboard = [[InlineKeyboardButton("Da", callback_data='1'),
-                 InlineKeyboardButton("Ne", callback_data='2')]]
-
+def generateFirstMsg(update, context):
+    taskID = uuid.uuid1().hex
+    tasks[taskID] = Task()
+    print("task info:",tasks[taskID].sentence)
+    bot = context.bot
+    keyboard = [[InlineKeyboardButton("Vejica je", callback_data='Y.{}'.format(taskID)),
+                 InlineKeyboardButton("Vejice ni", callback_data='N.{}'.format(taskID))]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    a = Task()
+    s = tasks[taskID].generate_display_sentence()
 
-    update.message.reply_text(a.sentence, reply_markup=reply_markup)
+    bot.send_message(chat_id=update.callback_query.message.chat.id, text=s, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
 
-
-def button(update, context):
+def generateReplyMsg(update, context):
     query = update.callback_query
-    if query.data == 'next':
-        bot = context.bot
-        keyboard = [[InlineKeyboardButton("naslednji", callback_data='next')]]
+    bot = context.bot
+    taskID = query.data.split(".")[1]
+    answer = query.data.split(".")[0]
+    chat_id = query.message.chat.id
+    message_id = query.message.message_id
+    myTask = tasks[taskID]
+    if answer == 'Y':
+        myTask.putAnswer(True)
+    else:
+        myTask.putAnswer(False)
+    
+    if len(myTask.answers) >= len(myTask.solutions):
+        # sentence is completed
+        answer = myTask.generate_final_sentence()
+        keyboard = keyboard = [[InlineKeyboardButton("Naslednji", callback_data='___next.{}'.format(query.message.message_id))]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        a = Task()
+        bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=answer, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+    else:
+        # sentence is not completed yet
+        s = myTask.generate_display_sentence()
+        keyboard = [[InlineKeyboardButton("Vejica je", callback_data='Y.{}'.format(taskID)),
+                     InlineKeyboardButton("Vejice ni", callback_data='N.{}'.format(taskID))]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=s, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        
+def callbackQueryHandler(update, context):
+    query = update.callback_query
+    bot = context.bot
+    print("QUERY DATA: ", query.data)
+    if query.data.startswith('___next'):
+        t = query.data.split(".")
+        if len(t) == 2:
+            
+            bot.edit_message_reply_markup(
+                chat_id=query.message.chat.id,
+                message_id=int(t[1]),
+                reply_markup=None, # empty markup
+                parse_mode=ParseMode.MARKDOWN
+                )
+            #except:
+            #    print("Error")
+        generateFirstMsg(update, context)
+    elif len(query.data.split(".")) == 2 and (query.data.split(".")[1] in tasks):
+        generateReplyMsg(update, context)
+    else:
         chat_id=query.message.chat.id
-        bot.send_message(chat_id=chat_id, text=a.sentence, parse_mode=ParseMode.MARKDOWN)
-        bot.send_message(chat_id=chat_id, text=a.correct_sentence, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-
-def starttmp(update, context):
-    keyboard = [[InlineKeyboardButton("naslednji", callback_data='next')]]
+        message_id=query.message.message_id
+        keyboard = [[InlineKeyboardButton("PONOVNI ZAGON", callback_data='___next')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        bot.send_message(chat_id=chat_id, text="Prišlo je do napake :/", reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        
+def start(update, context):
+    print("Start")
+    keyboard = [[InlineKeyboardButton("ZAČETEK", callback_data='___next')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Pritisni na gumb:', reply_markup=reply_markup)
+    update.message.reply_text('Z mano lahko vadiš postavljanje vejic. Uporabljam korpus [Vejica 1.3](https://www.clarin.si/repository/xmlui/handle/11356/1185), ki vsebuje primere delov besedil v slovenskem jeziku s popravljenimi vejicami. Upoštevaj, da besedila lahko vsebujejo druge slovnične napake. Za začetek pritisni spodnji gumb:', reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
 
 def main():
     PORT = int(os.environ.get('PORT', '8443'))
-    TOKEN = os.environ.get("TOKEN")
+    TOKEN = os.environ.get("TOKEN", "")
     updater = Updater(TOKEN, use_context=True)
     
-    updater.dispatcher.add_handler(CommandHandler('start', starttmp))
-    updater.dispatcher.add_handler(CallbackQueryHandler(button))
+    updater.dispatcher.add_handler(CommandHandler('start', start))
+    updater.dispatcher.add_handler(CallbackQueryHandler(callbackQueryHandler))
 
-    updater.start_webhook(listen="0.0.0.0",
+    if os.environ.get('DEBUG','off') == 'on':
+        updater.start_polling()
+    else:
+        updater.start_webhook(listen="0.0.0.0",
                         port=PORT,
                         url_path=TOKEN)
-    updater.bot.set_webhook("https://vejicebot.herokuapp.com/" + TOKEN)
-    updater.idle()
+        updater.idle()
 
 
-main()
+if __name__ == "__main__":
+    main()
+                              
