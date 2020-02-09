@@ -3,7 +3,7 @@ import logging
 import os
 import io
 import uuid
-
+from stats import *
 
 tasks = {}
 
@@ -30,6 +30,7 @@ class Task:
     
     def generate_final_sentence(self):
         md_out=''
+        correct = False
         errors = 0
         for i in range(len(self.sentence)):
             md_out += self.sentence[i]
@@ -47,9 +48,11 @@ class Task:
                     errors += 1
                 else:
                     md_out+="✔️"
-        if errors==0: md_out+="\n\n  ✅ Pravilno"
+        if errors==0:
+            md_out+="\n\n  ✅ Pravilno"
+            correct = True
         else: md_out+="\n\n ❕ Napačno"
-        return md_out
+        return correct, md_out
         
     def generate_sentence(self):
         x = random_line()
@@ -112,10 +115,13 @@ def generateReplyMsg(update, context):
     
     if len(myTask.answers) >= len(myTask.solutions):
         # sentence is completed
-        answer = myTask.generate_final_sentence()
+        correct, answer = myTask.generate_final_sentence()
         keyboard = keyboard = [[InlineKeyboardButton("Naslednji", callback_data='___next.{}'.format(query.message.message_id))]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=answer, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        if correct: c = 1
+        else: c = 0
+        updateUserStatistics(query.message.chat_id, c)
     else:
         # sentence is not completed yet
         s = myTask.generate_display_sentence()
@@ -154,18 +160,29 @@ def start(update, context):
     print("Start")
     keyboard = [[InlineKeyboardButton("ZAČETEK", callback_data='___next')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Z mano lahko vadiš postavljanje vejic. Uporabljam korpus [Vejica 1.3](https://www.clarin.si/repository/xmlui/handle/11356/1185), ki vsebuje primere delov besedil v slovenskem jeziku s popravljenimi vejicami. Upoštevaj, da besedila lahko vsebujejo druge slovnične napake. Za začetek pritisni spodnji gumb:', reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+    update.message.reply_text('Z mano lahko vadiš postavljanje vejic. Uporabljam korpus [Vejica 1.3](https://www.clarin.si/repository/xmlui/handle/11356/1185), ki vsebuje primere delov besedil v slovenskem jeziku s popravljenimi vejicami. Upoštevaj, da besedila lahko vsebujejo druge slovnične napake. Za začetek pritisni spodnji gumb. Napiši /stats za prikaz tvoje statistike.', reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
 
+def statsCommand(update, context):
+    userID = update.message.from_user.id
+    total, correct, err = getUserStatistics(userID)
+    if err: reply_text = "Prišlo je do napake."
+    elif total==0: reply_text = "Ni še rešenih primerov."
+    else:
+        frac = round(correct*100/total)
+        reply_text = "Število rešenih primerov: {}. Od tega {} % pravilnih.".format(total, frac)
+    update.message.reply_text(reply_text)
 def main():
     PORT = int(os.environ.get('PORT', '8443'))
     TOKEN = os.environ.get("TOKEN", "")
     updater = Updater(TOKEN, use_context=True)
     
     updater.dispatcher.add_handler(CommandHandler('start', start))
+    updater.dispatcher.add_handler(CommandHandler('stats', statsCommand))
     updater.dispatcher.add_handler(CallbackQueryHandler(callbackQueryHandler))
 
-    if os.environ.get('DEBUG','off') == 'on':
+    if os.environ.get('DEBUG','on') == 'on':
         updater.start_polling()
+        updater.idle()
     else:
         updater.start_webhook(listen="0.0.0.0",
                         port=PORT,
