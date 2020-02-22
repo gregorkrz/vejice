@@ -160,7 +160,7 @@ def start(update, context):
     print("Start")
     keyboard = [[InlineKeyboardButton("ZAČETEK", callback_data='___next')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Z mano lahko vadiš postavljanje vejic. Uporabljam korpus [Vejica 1.3](https://www.clarin.si/repository/xmlui/handle/11356/1185), ki vsebuje primere delov besedil v slovenskem jeziku s popravljenimi vejicami. Upoštevaj, da besedila lahko vsebujejo druge slovnične napake. Za začetek pritisni spodnji gumb. Napiši /stats za prikaz tvoje statistike. Za vprašanja, predloge itd. mi piši na @gregor01.', reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+    update.message.reply_text('Z mano lahko vadiš postavljanje vejic. Uporabljam korpus [Vejica 1.3](https://www.clarin.si/repository/xmlui/handle/11356/1185), ki vsebuje primere delov besedil v slovenskem jeziku s popravljenimi vejicami. Upoštevaj, da besedila lahko vsebujejo druge slovnične napake. Za začetek pritisni spodnji gumb. Napiši /stats za prikaz tvoje statistike. Za vprašanja, predloge itd. piši na @g3371', reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
 
 def statsCommand(update, context):
     userID = update.message.chat.id
