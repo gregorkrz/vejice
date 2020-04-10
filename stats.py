@@ -48,3 +48,17 @@ def updateUserStatistics(userID, correct):
     cur.close()
     mydb.disconnect()
     return False
+
+def reportSentence(s):
+    
+    s_str = s[0].split('\t')[0]
+    mydb, error = connect()
+    if error: return True
+    query = " insert into reported(data) values(%s); "
+
+    cur = mydb.cursor()
+    cur.execute(query, (s_str,))
+    mydb.commit()
+    cur.close()
+    mydb.disconnect()
+    return False

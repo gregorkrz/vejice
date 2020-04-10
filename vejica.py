@@ -116,7 +116,10 @@ def generateReplyMsg(update, context):
     if len(myTask.answers) >= len(myTask.solutions):
         # sentence is completed
         correct, answer = myTask.generate_final_sentence()
-        keyboard = keyboard = [[InlineKeyboardButton("Naslednji", callback_data='___next.{}'.format(query.message.message_id))]]
+        keyboard = keyboard = [[
+            InlineKeyboardButton("Naslednji", callback_data='___next.{}'.format(query.message.message_id)),
+            InlineKeyboardButton("Prijavi napako", callback_data='___report.{}.{}'.format(taskID, query.message.message_id))
+            ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=answer, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
         if correct: c = 1
@@ -134,18 +137,24 @@ def callbackQueryHandler(update, context):
     query = update.callback_query
     bot = context.bot
     print("QUERY DATA: ", query.data)
-    if query.data.startswith('___next'):
+    if query.data.startswith('___next') or query.data.startswith('___report') :
         t = query.data.split(".")
-        if len(t) == 2:
+        if len(t) == 3:
+            messid = int(t[2])
+            err = reportSentence(tasks[t[1]].sentence)
+            if err:
+                print("Napaka!",err)
+            bot.send_message(chat_id=query.message.chat.id, text="Hvala za prijavo.")
             
-            bot.edit_message_reply_markup(
-                chat_id=query.message.chat.id,
-                message_id=int(t[1]),
-                reply_markup=None, # empty markup
-                parse_mode=ParseMode.MARKDOWN
-                )
-            #except:
-            #    print("Error")
+        elif len(t) == 2:
+            messid = int(t[1])
+        bot.edit_message_reply_markup(
+               chat_id=query.message.chat.id,
+               message_id=messid,
+               reply_markup=None, # empty markup
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
         generateFirstMsg(update, context)
     elif len(query.data.split(".")) == 2 and (query.data.split(".")[1] in tasks):
         generateReplyMsg(update, context)
