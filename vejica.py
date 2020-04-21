@@ -137,7 +137,7 @@ def callbackQueryHandler(update, context):
     query = update.callback_query
     bot = context.bot
     print("QUERY DATA: ", query.data)
-    if query.data.startswith('___next') or query.data.startswith('___report') :
+    if (query.data.startswith('___next') or query.data.startswith('___report')) :
         t = query.data.split(".")
         if len(t) == 3:
             messid = int(t[2])
@@ -148,12 +148,13 @@ def callbackQueryHandler(update, context):
             
         elif len(t) == 2:
             messid = int(t[1])
-        bot.edit_message_reply_markup(
-               chat_id=query.message.chat.id,
-               message_id=messid,
-               reply_markup=None, # empty markup
-            parse_mode=ParseMode.MARKDOWN
-        )
+        if len(t) > 1:
+            bot.edit_message_reply_markup(
+                chat_id=query.message.chat.id,
+                message_id=messid,
+                reply_markup=None, # empty markup
+                parse_mode=ParseMode.MARKDOWN
+            )
     
         generateFirstMsg(update, context)
     elif len(query.data.split(".")) == 2 and (query.data.split(".")[1] in tasks):
