@@ -1,1 +1,1 @@
-web: python vejica.py
+web: python -m server

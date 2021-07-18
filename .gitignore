@@ -113,4 +113,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-vejica13.txt
+
+data/*
+models/*
+*.hdf5
+*.txt
+*.html

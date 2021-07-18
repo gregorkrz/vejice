@@ -1,29 +1,35 @@
-import random
 import logging
-import os
-import io
 import uuid
-from stats import *
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+
+from server.library.quiz.recommender import recommend
+from server.library.db.stats import *
 
 tasks = {}
 
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, ConversationHandler
-def random_line():
-    # get random line from file with entries
-    f = io.open('vejica_mod.txt', mode='r', encoding="utf-8")
-    line = next(f)
-    for num, aline in enumerate(f, 2):
-      if random.randrange(num): continue
-      line = aline
-    return line
+# Load id to sentence dict
+data = open("data/preprocessed/vejica_filtered.txt").readlines() # sentence embeddings
+sentences = {}
+for line in data:
+    a = line.strip().split("\t")
+    if len(a) == 2:
+        sentences[a[0]] = a[1]
+
+
+def get_line(user_id: str):
+    # recommends a line for the given user ID.
+    r = recommend(user_id)
+    return "{}\t{}".format(r, sentences[r])
+
 
 class Task:
-    def __init__(self):
-        self.solutions, self.sentence = self.generate_sentence()
+    def __init__(self, user_id):
+        self.user_id = str(user_id)
+        self.solutions, self.sentence, self.sent_id = self.generate_sentence()
         self.answers = []
     def putAnswer(self, answer):
         self.answers.append(answer)
@@ -55,7 +61,7 @@ class Task:
         return correct, md_out
         
     def generate_sentence(self):
-        x = random_line()
+        sent_id, x = get_line(self.user_id).split("\t")
         sentence = []
         solutions = []
         last_index = -1
@@ -63,19 +69,16 @@ class Task:
         while x.find('¤', last_index+1) > -1 or x.find('÷', last_index+1) > -1:
             commaLoc = x.find('¤', last_index+1)
             noCommaLoc = x.find('÷', last_index+1)
-            print(commaLoc, "jjjj", noCommaLoc)
             if commaLoc != -1 and (noCommaLoc > commaLoc or noCommaLoc == -1):
-                print("appendComma", last_index, commaLoc)
                 sentence.append(x[last_index+1:commaLoc])
                 last_index = commaLoc
                 solutions.append(True)
             else:
                 sentence.append(x[last_index+1:noCommaLoc])
-                print("appNoComma", last_index, noCommaLoc)
                 last_index = noCommaLoc
                 solutions.append(False)
         sentence.append(x[last_index+1:])
-        return solutions, sentence
+        return solutions, sentence, sent_id
     
     def generate_display_sentence(self):
         md_out=''
@@ -89,7 +92,8 @@ class Task:
 
 def generateFirstMsg(update, context):
     taskID = uuid.uuid1().hex
-    tasks[taskID] = Task()
+    user_id = update.callback_query.message.chat.id
+    tasks[taskID] = Task(user_id)
     print("task info:",tasks[taskID].sentence)
     bot = context.bot
     keyboard = [[InlineKeyboardButton("Vejica je", callback_data='Y.{}'.format(taskID)),
@@ -124,7 +128,8 @@ def generateReplyMsg(update, context):
         bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=answer, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
         if correct: c = 1
         else: c = 0
-        updateUserStatistics(query.message.chat_id, c)
+        print("updating user stats")
+        updateUserStatistics(str(query.message.chat_id), c, myTask.sent_id)
     else:
         # sentence is not completed yet
         s = myTask.generate_display_sentence()
@@ -136,14 +141,14 @@ def generateReplyMsg(update, context):
 def callbackQueryHandler(update, context):
     query = update.callback_query
     bot = context.bot
-    print("QUERY DATA: ", query.data)
+    #print("QUERY DATA: ", query.data)
     if (query.data.startswith('___next') or query.data.startswith('___report')) :
         t = query.data.split(".")
         if len(t) == 3:
             messid = int(t[2])
-            err = reportSentence(tasks[t[1]].sentence)
+            err = reportSentence(tasks[t[1]].sent_id)
             if err:
-                print("Napaka!",err)
+                print("Error!",err)
             bot.send_message(chat_id=query.message.chat.id, text="Hvala za prijavo.")
             
         elif len(t) == 2:
@@ -164,42 +169,19 @@ def callbackQueryHandler(update, context):
         message_id=query.message.message_id
         keyboard = [[InlineKeyboardButton("PONOVNI ZAGON", callback_data='___next')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        bot.send_message(chat_id=chat_id, text="Prišlo je do napake :/", reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        bot.send_message(chat_id=chat_id, text="Prišlo je do napake.", reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
         
 def start(update, context):
-    print("Start")
     keyboard = [[InlineKeyboardButton("ZAČETEK", callback_data='___next')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Z mano lahko vadiš postavljanje vejic. Uporabljam korpus [Vejica 1.3](https://www.clarin.si/repository/xmlui/handle/11356/1185), ki vsebuje primere delov besedil v slovenskem jeziku s popravljenimi vejicami. Upoštevaj, da besedila lahko vsebujejo druge slovnične napake. Za začetek pritisni spodnji gumb. Napiši /stats za prikaz tvoje statistike. Za vprašanja, predloge itd. piši na @g3371', reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+    update.message.reply_text('Z mano lahko vadiš postavljanje vejic. Uporabljam korpus [Vejica 1.3](https://www.clarin.si/repository/xmlui/handle/11356/1185), ki vsebuje primere delov besedil v slovenskem jeziku s popravljenimi vejicami. Upoštevaj, da besedila lahko vsebujejo druge slovnične napake. Za začetek pritisni spodnji gumb. Napiši /stats za prikaz tvoje statistike.', reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
 
 def statsCommand(update, context):
     userID = update.message.chat.id
-    total, correct, err = getUserStatistics(userID)
-    if err: reply_text = "Prišlo je do napake."
-    elif total==0: reply_text = "Ni še rešenih primerov."
+    total, correct = getUserStatistics(str(userID))
+    if total == 0:
+        reply_text = "Ni še rešenih primerov."
     else:
         frac = round(correct*100/total)
         reply_text = "Število rešenih primerov: {}. Od tega {} % pravilnih.".format(total, frac)
     update.message.reply_text(reply_text)
-def main():
-    PORT = int(os.environ.get('PORT', '8443'))
-    TOKEN = os.environ.get("TOKEN", "")
-    updater = Updater(TOKEN, use_context=True)
-    
-    updater.dispatcher.add_handler(CommandHandler('start', start))
-    updater.dispatcher.add_handler(CommandHandler('stats', statsCommand))
-    updater.dispatcher.add_handler(CallbackQueryHandler(callbackQueryHandler))
-
-    if os.environ.get('DEBUG','on') == 'on':
-        updater.start_polling()
-        updater.idle()
-    else:
-        updater.start_webhook(listen="0.0.0.0",
-                        port=PORT,
-                        url_path=TOKEN)
-        updater.idle()
-
-
-if __name__ == "__main__":
-    main()
-                              
