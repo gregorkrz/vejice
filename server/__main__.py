@@ -19,6 +19,8 @@ def download_models():
     download_file(url1, "data/preprocessed", "vejica_filtered.txt")
     download_file(url2, "models", "sent_emb_pos_lstm.emb")
 
+if __name__ == "__main__":
+    download_models()
 
 from server.library.common.env_load import *
 from server.library.quiz.vejiceTg import start, statsCommand, callbackQueryHandler
