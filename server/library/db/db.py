@@ -20,8 +20,8 @@ class Database:
             "host": parsed_string.hostname,
             "user": parsed_string.username,
             "password": parsed_string.password,
-            "database": parsed_string.path.split("/")[1],
-            "port": os.environ.get("DB_PORT", 5432)
+            "database": parsed_string.path.lstrip("/"),
+            "port": parsed_string.port
         }
         self.pool = psycopg2.pool.ThreadedConnectionPool(
             minconn=1, maxconn=10, **db_config
