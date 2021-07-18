@@ -15,4 +15,4 @@ def create_schema(db):
     if schema_exists(db):
         return
     script = open("scripts/storage/schema_create.sql").read().split(";")
-    db.exec_stmt(script, tuple(), commit=True)
+    db.exec_stmt(script, tuple(), commit=True, fetch=False)
