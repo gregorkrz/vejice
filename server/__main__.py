@@ -3,6 +3,23 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 from pathlib import Path
 import urllib.request
 
+def download_file(url, path, filename):
+    print("Downloading", filename)
+    Path(path).mkdir(parents=True, exist_ok=True)
+    filehandle, _ = urllib.request.urlretrieve(url)
+    content = open(filehandle, "rb").read()
+    f = open(os.path.join(path, filename), "wb")
+    f.write(content)
+    f.close()
+    print("Downloaded", filename)
+
+def download_models():
+    url1 = "https://www.dropbox.com/s/axh09ppx4wrexue/vejica_filtered.txt?dl=1"
+    url2 = "https://www.dropbox.com/s/0hb1e09jxar7wpu/sent_emb_pos_lstm.emb?dl=1"
+    download_file(url1, "data/preprocessed", "vejica_filtered.txt")
+    download_file(url2, "models", "sent_emb_pos_lstm.emb")
+
+
 from server.library.common.env_load import *
 from server.library.quiz.vejiceTg import start, statsCommand, callbackQueryHandler
 from server.library.db.db_schema import create_schema
@@ -30,21 +47,6 @@ def main():
                         url_path=TOKEN)
         updater.idle()
 
-def download_file(url, path, filename):
-    print("Downloading", filename)
-    Path(path).mkdir(parents=True, exist_ok=True)
-    filehandle, _ = urllib.request.urlretrieve(url)
-    content = open(filehandle, "rb").read()
-    f = open(os.path.join(path, filename), "wb")
-    f.write(content)
-    f.close()
-    print("Downloaded", filename)
-
-def download_models():
-    url1 = "https://www.dropbox.com/s/axh09ppx4wrexue/vejica_filtered.txt?dl=1"
-    url2 = "https://www.dropbox.com/s/0hb1e09jxar7wpu/sent_emb_pos_lstm.emb?dl=1"
-    download_file(url1, "data/preprocessed", "vejica_filtered.txt")
-    download_file(url2, "models", "sent_emb_pos_lstm.emb")
 
 if __name__ == "__main__":
     download_models()
